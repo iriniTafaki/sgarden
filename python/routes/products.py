@@ -1,10 +1,12 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from typing import Optional
-from models.product import ProductRequest, ProductResponse
-from database import products_collection
-from security.jwt_handler import get_current_user
-from bson import ObjectId
 from datetime import datetime
+from typing import Optional
+
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException, status, Depends
+
+from database import products_collection
+from models.product import ProductRequest, ProductResponse
+from security.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/api/products", tags=["products"])
 

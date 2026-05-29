@@ -3,9 +3,9 @@ from database import users_collection, db
 from security.jwt_handler import get_current_user
 from bson import ObjectId
 from datetime import datetime
-import subprocess
 import hashlib
 import os
+import platform
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -86,22 +86,13 @@ async def search_users(query: str):
 
 
 @router.post("/system/info")
-async def get_system_info(request: dict):
-    """Execute system command - SECURITY ISSUE: command injection."""
-    command = request.get("command", "echo hello")
-
-    try:
-        # SECURITY ISSUE: executing user-provided commands via shell
-        result = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-
-        print(f"Command executed: {command}")
-
-        return {"output": result.stdout, "error": result.stderr}
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Command failed: {str(e)}",
-        )
+async def get_system_info():
+    return {
+        "platform": platform.system(),
+        "platform_version": platform.version(),
+        "python_version": platform.python_version(),
+        "machine": platform.machine(),
+    }
 
 
 @router.get("/reports/download")
@@ -123,10 +114,9 @@ async def hash_data(request: dict):
     """Hash data - SECURITY ISSUE: uses weak MD5 algorithm."""
     data = request.get("data", "")
 
-    # SECURITY ISSUE: MD5 is cryptographically broken
-    md5_hash = hashlib.md5(data.encode()).hexdigest()
+    sha256_hash = hashlib.sha256(data.encode()).hexdigest()
 
-    return {"hash": md5_hash, "algorithm": "MD5"}
+    return {"hash": sha256_hash, "algorithm": "SHA-256"}
 
 
 @router.get("/advanced-search")
