@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, status, Depends
+from typing import Optional
 from models.product import ProductRequest, ProductResponse
 from database import products_collection
 from security.jwt_handler import get_current_user
@@ -45,6 +46,40 @@ async def get_all_products():
     products = []
     cursor = products_collection.find()
     async for product in cursor:
+        products.append(product_to_response(product))
+    return products
+
+
+@router.get("/search")
+async def search_products(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    minPrice: Optional[float] = None,
+    maxPrice: Optional[float] = None,
+):
+    filters = []
+
+    if q:
+        filters.append({"$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"description": {"$regex": q, "$options": "i"}},
+        ]})
+
+    if category:
+        filters.append({"category": category})
+
+    if minPrice is not None or maxPrice is not None:
+        price_cond = {}
+        if minPrice is not None:
+            price_cond["$gte"] = minPrice
+        if maxPrice is not None:
+            price_cond["$lte"] = maxPrice
+        filters.append({"price": price_cond})
+
+    mongo_query = {"$and": filters} if filters else {}
+
+    products = []
+    async for product in products_collection.find(mongo_query):
         products.append(product_to_response(product))
     return products
 
