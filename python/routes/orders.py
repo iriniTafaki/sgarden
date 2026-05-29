@@ -44,7 +44,7 @@ async def resolve_items(items) -> tuple[list[dict], float]:
 
 
 @router.post("", status_code=status.HTTP_201_CREATED)
-async def create_order(request: OrderRequest, current_user: dict = Depends(get_current_user)):
+async def create_order(request: OrderRequest, _: dict = Depends(get_current_user)):
     item_docs, total = await resolve_items(request.items)
     now = datetime.utcnow()
     order_doc = {
@@ -59,7 +59,7 @@ async def create_order(request: OrderRequest, current_user: dict = Depends(get_c
 
 
 @router.get("")
-async def list_orders(current_user: dict = Depends(get_current_user)):
+async def list_orders(_: dict = Depends(get_current_user)):
     orders = []
     async for order in orders_collection.find():
         orders.append(order_to_response(order))
@@ -67,7 +67,7 @@ async def list_orders(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/{order_id}")
-async def get_order(order_id: str, current_user: dict = Depends(get_current_user)):
+async def get_order(order_id: str, _: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     order = await orders_collection.find_one({"_id": ObjectId(order_id)})
@@ -78,7 +78,7 @@ async def get_order(order_id: str, current_user: dict = Depends(get_current_user
 
 @router.put("/{order_id}")
 async def update_order(order_id: str, request: OrderRequest,
-                       current_user: dict = Depends(get_current_user)):
+                       _: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     item_docs, total = await resolve_items(request.items)
@@ -93,7 +93,7 @@ async def update_order(order_id: str, request: OrderRequest,
 
 
 @router.delete("/{order_id}")
-async def delete_order(order_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_order(order_id: str, _: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(order_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     result = await orders_collection.delete_one({"_id": ObjectId(order_id)})

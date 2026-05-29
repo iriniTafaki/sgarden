@@ -1,11 +1,13 @@
-from fastapi import APIRouter, HTTPException, status, Depends
-from database import users_collection, db
-from security.jwt_handler import get_current_user
-from bson import ObjectId
-from datetime import datetime
 import hashlib
 import os
 import platform
+from datetime import datetime
+
+from bson import ObjectId
+from fastapi import APIRouter, HTTPException, status, Depends
+
+from database import users_collection, db
+from security.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 

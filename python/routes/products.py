@@ -5,7 +5,7 @@ from bson import ObjectId
 from fastapi import APIRouter, HTTPException, status, Depends
 
 from database import products_collection
-from models.product import ProductRequest, ProductResponse
+from models.product import ProductRequest
 from security.jwt_handler import get_current_user
 
 router = APIRouter(prefix="/api/products", tags=["products"])
