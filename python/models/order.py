@@ -8,3 +8,7 @@ class OrderItem(BaseModel):
 
 class OrderRequest(BaseModel):
     items: list[OrderItem]
+
+
+class OrderStatusUpdate(BaseModel):
+    status: str

@@ -1,7 +1,6 @@
 from pydantic import BaseModel
 from typing import Literal
 
-
 class AlertResponse(BaseModel):
     productName: str
     currentStock: int
