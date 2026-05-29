@@ -45,16 +45,48 @@ async def resolve_items(items) -> tuple[list[dict], float]:
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_order(request: OrderRequest, _: dict = Depends(get_current_user)):
-    item_docs, total = await resolve_items(request.items)
+    # Phase 1: resolve all products and validate stock — no modifications yet
+    item_docs = []
+    total = 0.0
+    for item in request.items:
+        if not ObjectId.is_valid(item.productId):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"Invalid productId: {item.productId}")
+        product = await products_collection.find_one({"_id": ObjectId(item.productId)})
+        if not product:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                                detail=f"Product {item.productId} not found")
+        if product.get("stock", 0) < item.quantity:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST,
+                                detail=f"Insufficient stock for '{product['name']}'")
+        price = product.get("price", 0.0)
+        item_docs.append({
+            "productId": item.productId,
+            "name": product.get("name"),
+            "quantity": item.quantity,
+            "price": price,
+        })
+        total += price * item.quantity
+
+    # Phase 2: insert order
     now = datetime.utcnow()
     order_doc = {
         "items": item_docs,
-        "total": total,
+        "total": round(total, 2),
+        "status": "pending",
         "createdAt": now,
         "updatedAt": now,
     }
     result = await orders_collection.insert_one(order_doc)
     order_doc["_id"] = result.inserted_id
+
+    # Phase 3: deduct stock
+    for item_doc in item_docs:
+        await products_collection.update_one(
+            {"_id": ObjectId(item_doc["productId"])},
+            {"$inc": {"stock": -item_doc["quantity"]}},
+        )
+
     return order_to_response(order_doc)
 
 
