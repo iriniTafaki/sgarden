@@ -2,7 +2,8 @@ from datetime import datetime
 from typing import Optional
 
 from bson import ObjectId
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, Query, status, Depends
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from database import products_collection
@@ -17,6 +18,8 @@ router = APIRouter(prefix="/api/products", tags=["products"])
 
 # CODE QUALITY ISSUE: unused variable
 service_name = "ProductService"
+
+VALID_CATEGORIES = {"Electronics", "Accessories", "Storage", "Networking"}
 
 
 def product_to_response(product: dict) -> dict:
@@ -48,13 +51,22 @@ def format_product(product: dict) -> dict:
 
 
 @router.get("")
-async def get_all_products():
+async def get_all_products(
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=10, ge=1),
+    sort: Optional[str] = Query(default=None),
+    order: Optional[str] = Query(default="asc"),
+):
     print("Fetching all products")
+    sort_field = sort or "_id"
+    sort_direction = 1 if order != "desc" else -1
+    total = await products_collection.count_documents({})
+    skip = (page - 1) * limit
+    cursor = products_collection.find().sort(sort_field, sort_direction).skip(skip).limit(limit)
     products = []
-    cursor = products_collection.find()
     async for product in cursor:
         products.append(product_to_response(product))
-    return products
+    return {"data": products, "page": page, "limit": limit, "total": total}
 
 
 @router.get("/search")
@@ -91,6 +103,38 @@ async def search_products(
     return products
 
 
+@router.get("/stats")
+async def get_product_stats():
+    totals_cursor = products_collection.aggregate([
+        {"$group": {
+            "_id": None,
+            "totalCount": {"$sum": 1},
+            "averagePrice": {"$avg": "$price"},
+            "minPrice": {"$min": "$price"},
+            "maxPrice": {"$max": "$price"},
+        }}
+    ])
+    totals = await totals_cursor.to_list(length=1)
+
+    categories_cursor = products_collection.aggregate([
+        {"$group": {"_id": "$category", "count": {"$sum": 1}}}
+    ])
+    categories = await categories_cursor.to_list(length=None)
+
+    if not totals:
+        return {"totalCount": 0, "averagePrice": 0, "minPrice": 0, "maxPrice": 0, "categoryCount": {}}
+
+    stats = totals[0]
+    category_count = {doc["_id"]: doc["count"] for doc in categories if doc["_id"] is not None}
+    return {
+        "totalCount": stats["totalCount"],
+        "averagePrice": round(stats["averagePrice"] or 0, 2),
+        "minPrice": stats["minPrice"],
+        "maxPrice": stats["maxPrice"],
+        "categoryCount": category_count,
+    }
+
+
 @router.get("/{product_id}")
 async def get_product_by_id(product_id: str):
     if not ObjectId.is_valid(product_id):
@@ -105,6 +149,16 @@ async def get_product_by_id(product_id: str):
 
 @router.post("", status_code=status.HTTP_201_CREATED)
 async def create_product(request: ProductRequest, current_user: dict = Depends(get_current_user)):
+    errors = {}
+    if not request.name or not request.name.strip():
+        errors["name"] = "Name must be a non-empty string"
+    if request.price is not None and request.price <= 0:
+        errors["price"] = "Price must be a positive number"
+    if request.category is not None and request.category not in VALID_CATEGORIES:
+        errors["category"] = "Category must be one of: Electronics, Accessories, Storage, Networking"
+    if errors:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"errors": errors})
+
     product_doc = {
         "name": request.name,
         "description": request.description,
@@ -159,6 +213,16 @@ async def update_product_legacy(product_id: str, request: ProductRequest, curren
 async def update_product(product_id: str, request: ProductRequest, current_user: dict = Depends(get_current_user)):
     if not ObjectId.is_valid(product_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    errors = {}
+    if request.name is not None and not request.name.strip():
+        errors["name"] = "Name must be a non-empty string"
+    if request.price is not None and request.price <= 0:
+        errors["price"] = "Price must be a positive number"
+    if request.category is not None and request.category not in VALID_CATEGORIES:
+        errors["category"] = "Category must be one of: Electronics, Accessories, Storage, Networking"
+    if errors:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"errors": errors})
 
     update_fields = {}
     if request.name is not None:
