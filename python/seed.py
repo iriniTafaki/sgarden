@@ -1,4 +1,4 @@
-from database import users_collection, products_collection
+from database import users_collection, products_collection, orders_collection
 import bcrypt
 from datetime import datetime
 
@@ -47,8 +47,68 @@ SEED_PRODUCTS = [
 ]
 
 
+# Orders: (product name, quantity) pairs per order, with a fixed 2024 date
+SEED_ORDER_TEMPLATES = [
+    {"items": [("Wireless Mouse", 2), ("USB Flash Drive", 3)],         "date": datetime(2024, 1, 15)},
+    {"items": [("Mechanical Keyboard", 1), ("Mouse Pad XL", 1)],       "date": datetime(2024, 2, 8)},
+    {"items": [("USB-C Hub", 2), ("Cable Organizer", 5)],              "date": datetime(2024, 3, 22)},
+    {"items": [("Webcam HD", 1), ("Monitor Stand", 1)],                "date": datetime(2024, 4, 10)},
+    {"items": [("External SSD", 2)],                                   "date": datetime(2024, 5, 5)},
+    {"items": [("Wi-Fi Router", 1), ("Ethernet Cable", 3)],            "date": datetime(2024, 6, 18)},
+    {"items": [("Desk Lamp", 2), ("Headphone Stand", 1)],              "date": datetime(2024, 7, 30)},
+    {"items": [("Wireless Mouse", 3), ("Laptop Sleeve", 2)],           "date": datetime(2024, 8, 14)},
+    {"items": [("Power Strip", 2), ("USB-C Hub", 1)],                  "date": datetime(2024, 9, 25)},
+    {"items": [("Mechanical Keyboard", 2), ("Webcam HD", 1)],          "date": datetime(2024, 10, 11)},
+    {"items": [("External SSD", 1), ("USB Flash Drive", 5)],           "date": datetime(2024, 11, 7)},
+    {"items": [("Wi-Fi Router", 2), ("Mouse Pad XL", 3)],              "date": datetime(2024, 12, 20)},
+]
+
+
+async def seed_orders():
+    """Seed sample orders referencing seeded products, spread across 2024."""
+    count = await orders_collection.count_documents({})
+    if count > 0:
+        return
+
+    product_map = {}
+    async for p in products_collection.find():
+        product_map[p["name"]] = p
+
+    if not product_map:
+        return
+
+    orders_to_insert = []
+    for template in SEED_ORDER_TEMPLATES:
+        items = []
+        total = 0.0
+        for product_name, quantity in template["items"]:
+            product = product_map.get(product_name)
+            if not product:
+                continue
+            item_total = product["price"] * quantity
+            items.append({
+                "productId": str(product["_id"]),
+                "name": product["name"],
+                "quantity": quantity,
+                "price": product["price"],
+            })
+            total += item_total
+        if items:
+            orders_to_insert.append({
+                "items": items,
+                "total": round(total, 2),
+                "status": "completed",
+                "createdAt": template["date"],
+                "updatedAt": template["date"],
+            })
+
+    if orders_to_insert:
+        await orders_collection.insert_many(orders_to_insert)
+        print(f"Seeded {len(orders_to_insert)} orders")
+
+
 async def seed_data():
-    """Seed test users and sample products if they don't exist."""
+    """Seed test users, sample products, and sample orders if they don't exist."""
     # Seed users
     for user_data in SEED_USERS:
         existing = await users_collection.find_one({"username": user_data["username"]})
@@ -65,3 +125,5 @@ async def seed_data():
             products_to_insert.append(product)
         await products_collection.insert_many(products_to_insert)
         print(f"Seeded {len(products_to_insert)} products")
+
+    await seed_orders()
